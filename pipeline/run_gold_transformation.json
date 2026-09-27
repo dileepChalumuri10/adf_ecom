@@ -1,0 +1,183 @@
+{
+	"name": "run_gold_transformation",
+	"properties": {
+		"activities": [
+			{
+				"name": "Reload DimCountry",
+				"type": "Script",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"linkedServiceName": {
+					"referenceName": "ls_db",
+					"type": "LinkedServiceReference"
+				},
+				"typeProperties": {
+					"scripts": [
+						{
+							"type": "Query",
+							"text": {
+								"value": "DELETE FROM DimCountry;\n\nINSERT INTO DimCountry (CountryName)\nSELECT DISTINCT Country\nFROM Staging_Sales;",
+								"type": "Expression"
+							}
+						}
+					],
+					"scriptBlockExecutionTimeout": "02:00:00"
+				}
+			},
+			{
+				"name": "Reload DimCustomer",
+				"type": "Script",
+				"dependsOn": [
+					{
+						"activity": "Reload DimCountry",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"linkedServiceName": {
+					"referenceName": "ls_db",
+					"type": "LinkedServiceReference"
+				},
+				"typeProperties": {
+					"scripts": [
+						{
+							"type": "Query",
+							"text": {
+								"value": "DELETE FROM DimCustomer;\n\nINSERT INTO DimCustomer (CustomerID)\nSELECT DISTINCT CustomerID\nFROM Staging_Sales;",
+								"type": "Expression"
+							}
+						}
+					],
+					"scriptBlockExecutionTimeout": "02:00:00"
+				}
+			},
+			{
+				"name": "Reload DimProduct",
+				"type": "Script",
+				"dependsOn": [
+					{
+						"activity": "Reload DimCustomer",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"linkedServiceName": {
+					"referenceName": "ls_db",
+					"type": "LinkedServiceReference"
+				},
+				"typeProperties": {
+					"scripts": [
+						{
+							"type": "Query",
+							"text": {
+								"value": "DELETE FROM DimProduct;\n\nINSERT INTO DimProduct (StockCode, Description)\nSELECT StockCode, MIN(Description)\nFROM Staging_Sales\nGROUP BY StockCode;",
+								"type": "Expression"
+							}
+						}
+					],
+					"scriptBlockExecutionTimeout": "02:00:00"
+				}
+			},
+			{
+				"name": "Reload DimDate",
+				"type": "Script",
+				"dependsOn": [
+					{
+						"activity": "Reload DimProduct",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"linkedServiceName": {
+					"referenceName": "ls_db",
+					"type": "LinkedServiceReference"
+				},
+				"typeProperties": {
+					"scripts": [
+						{
+							"type": "Query",
+							"text": {
+								"value": "DELETE FROM DimDate;\n\nINSERT INTO DimDate\n(\n    DateKey,\n    FullDate,\n    Year,\n    Quarter,\n    Month,\n    Day,\n    DayOfWeek\n)\nSELECT DISTINCT\n    CAST(FORMAT(CAST(InvoiceDate AS DATE), 'yyyyMMdd') AS INT),\n    CAST(InvoiceDate AS DATE),\n    YEAR(InvoiceDate),\n    DATEPART(QUARTER, InvoiceDate),\n    MONTH(InvoiceDate),\n    DAY(InvoiceDate),\n    DATENAME(WEEKDAY, InvoiceDate)\nFROM Staging_Sales;",
+								"type": "Expression"
+							}
+						}
+					],
+					"scriptBlockExecutionTimeout": "02:00:00"
+				}
+			},
+			{
+				"name": "Reload FactSales",
+				"type": "Script",
+				"dependsOn": [
+					{
+						"activity": "Reload DimDate",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"linkedServiceName": {
+					"referenceName": "ls_db",
+					"type": "LinkedServiceReference"
+				},
+				"typeProperties": {
+					"scripts": [
+						{
+							"type": "Query",
+							"text": {
+								"value": "TRUNCATE TABLE FactSales;\n\nINSERT INTO FactSales (Invoice, StockCode, CustomerID, DateKey, CountryKey, Quantity, Price, TotalAmount, IsCancelled, RecordType)\nSELECT\n    s.Invoice, s.StockCode, s.CustomerID,\n    CAST(FORMAT(CAST(s.InvoiceDate AS DATE), 'yyyyMMdd') AS INT),\n    c.CountryKey, s.Quantity, s.Price, s.Quantity * s.Price,\n    s.IsCancelled, s.RecordType\nFROM Staging_Sales s\nJOIN DimCountry c ON c.CountryName = s.Country;",
+								"type": "Expression"
+							}
+						}
+					],
+					"scriptBlockExecutionTimeout": "02:00:00"
+				}
+			}
+		],
+		"annotations": [],
+		"lastPublishTime": "2026-09-14T13:46:12Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

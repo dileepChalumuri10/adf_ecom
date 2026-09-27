@@ -1,0 +1,65 @@
+{
+	"name": "dataflow_clean_sales",
+	"properties": {
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "df_json",
+						"type": "DatasetReference"
+					},
+					"name": "sourceBronzeSales"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "ds_silver_sales_parquet",
+						"type": "DatasetReference"
+					},
+					"name": "sinkSilverSales"
+				}
+			],
+			"transformations": [
+				{
+					"name": "IsCancelled"
+				}
+			],
+			"scriptLines": [
+				"source(output(",
+				"          RecordID as integer,",
+				"          Invoice as string,",
+				"          StockCode as string,",
+				"          Description as string,",
+				"          Quantity as integer,",
+				"          InvoiceDate as string,",
+				"          Price as double,",
+				"          CustomerID as integer,",
+				"          Country as string,",
+				"          LastModifiedDate as string,",
+				"          RecordStatus as string",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     ignoreNoFilesFound: false,",
+				"     documentForm: 'documentPerLine') ~> sourceBronzeSales",
+				"sourceBronzeSales derive(IsCancelled = startsWith(Invoice, 'C'),",
+				"          RecordType = iif(StockCode == 'POST', 'Postage', 'Sale'),",
+				"          CustomerID = iif(isNull(CustomerID), -1, CustomerID),",
+				"          LastModifiedDate = toTimestamp(LastModifiedDate, 'yyyy-MM-dd\\'T\\'HH:mm:ss.SSS'),",
+				"          InvoiceDate = toTimestamp(InvoiceDate, 'yyyy-MM-dd\\'T\\'HH:mm:ss')) ~> IsCancelled",
+				"IsCancelled sink(allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     format: 'parquet',",
+				"     partitionFileNames:['Silver_sales.parquet'],",
+				"     umask: 0022,",
+				"     preCommands: [],",
+				"     postCommands: [],",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     partitionBy('hash', 1)) ~> sinkSilverSales"
+			]
+		}
+	}
+}

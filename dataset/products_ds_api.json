@@ -1,0 +1,16 @@
+{
+	"name": "products_ds_api",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "ls_api",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "RestResource",
+		"typeProperties": {
+			"relativeUrl": "products?skip={skip}&limit=30"
+		},
+		"schema": []
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

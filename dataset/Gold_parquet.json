@@ -1,0 +1,22 @@
+{
+	"name": "Gold_parquet",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "ls_source",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "Parquet",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"fileName": "FactSales_2026-09-14.parquet",
+				"folderPath": "FactSales",
+				"fileSystem": "gold"
+			},
+			"compressionCodec": "snappy"
+		},
+		"schema": []
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

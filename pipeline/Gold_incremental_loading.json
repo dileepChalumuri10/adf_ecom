@@ -1,0 +1,293 @@
+{
+	"name": "Gold_incremental_loading",
+	"properties": {
+		"activities": [
+			{
+				"name": "Get_Gold_Watermark",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "select LastWatermarkValue from WatermarkControl where TableName='FactSales'",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "ds_last_cdc",
+						"type": "DatasetReference"
+					}
+				}
+			},
+			{
+				"name": "Total_rows_count",
+				"type": "Script",
+				"dependsOn": [
+					{
+						"activity": "Get_Gold_Watermark",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"linkedServiceName": {
+					"referenceName": "ls_db",
+					"type": "LinkedServiceReference"
+				},
+				"typeProperties": {
+					"scripts": [
+						{
+							"type": "Query",
+							"text": {
+								"value": "SELECT count(*) as total_rows \nFROM Staging_Sales where LastModifiedDate>'@{activity('Get_Gold_Watermark').output.firstRow.LastWatermarkValue}'",
+								"type": "Expression"
+							}
+						}
+					],
+					"scriptBlockExecutionTimeout": "02:00:00"
+				}
+			},
+			{
+				"name": "If_count_greaterthan_0",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "Total_rows_count",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@greater(activity('Total_rows_count').output.resultSets[0].rows[0].total_rows,0 )",
+						"type": "Expression"
+					},
+					"ifTrueActivities": [
+						{
+							"name": "upsert_dimensions",
+							"type": "Script",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"linkedServiceName": {
+								"referenceName": "ls_db",
+								"type": "LinkedServiceReference"
+							},
+							"typeProperties": {
+								"scripts": [
+									{
+										"type": "Query",
+										"text": {
+											"value": "/* ============================\n   DimCountry\n   ============================ */\n\nINSERT INTO DimCountry (CountryName)\nSELECT DISTINCT s.Country\nFROM Staging_Sales s\nWHERE s.LastModifiedDate >\n      '@{activity('Get_Gold_Watermark').output.firstRow.LastWatermarkValue}'\nAND NOT EXISTS\n(\n    SELECT 1\n    FROM DimCountry d\n    WHERE d.CountryName = s.Country\n);\n\n\n/* ============================\n   DimCustomer\n   ============================ */\n\nINSERT INTO DimCustomer (CustomerID)\nSELECT DISTINCT s.CustomerID\nFROM Staging_Sales s\nWHERE s.LastModifiedDate >\n      '@{activity('Get_Gold_Watermark').output.firstRow.LastWatermarkValue}'\nAND NOT EXISTS\n(\n    SELECT 1\n    FROM DimCustomer d\n    WHERE d.CustomerID = s.CustomerID\n);\n\n\n/* ============================\n   DimProduct\n   ============================ */\n\nINSERT INTO DimProduct\n(\n    StockCode,\n    Description\n)\nSELECT\n    s.StockCode,\n    MIN(s.Description)\nFROM Staging_Sales s\nWHERE s.LastModifiedDate >\n      '@{activity('Get_Gold_Watermark').output.firstRow.LastWatermarkValue}'\nAND NOT EXISTS\n(\n    SELECT 1\n    FROM DimProduct d\n    WHERE d.StockCode = s.StockCode\n)\nGROUP BY s.StockCode;\n\n\n/* ============================\n   DimDate\n   ============================ */\n\nINSERT INTO DimDate\n(\n    DateKey,\n    FullDate,\n    Year,\n    Quarter,\n    Month,\n    Day,\n    DayOfWeek\n)\nSELECT DISTINCT\n\n    CAST(\n        FORMAT(CAST(s.InvoiceDate AS DATE), 'yyyyMMdd')\n        AS INT\n    ),\n\n    CAST(s.InvoiceDate AS DATE),\n\n    YEAR(s.InvoiceDate),\n\n    DATEPART(QUARTER, s.InvoiceDate),\n\n    MONTH(s.InvoiceDate),\n\n    DAY(s.InvoiceDate),\n\n    DATENAME(WEEKDAY, s.InvoiceDate)\n\nFROM Staging_Sales s\n\nWHERE s.LastModifiedDate >\n      '@{activity('Get_Gold_Watermark').output.firstRow.LastWatermarkValue}'\n\nAND NOT EXISTS\n(\n    SELECT 1\n    FROM DimDate d\n    WHERE d.DateKey =\n        CAST(\n            FORMAT(CAST(s.InvoiceDate AS DATE), 'yyyyMMdd')\n            AS INT\n        )\n);",
+											"type": "Expression"
+										}
+									}
+								],
+								"scriptBlockExecutionTimeout": "02:00:00"
+							}
+						},
+						{
+							"name": "Merge_FactSales",
+							"type": "Script",
+							"dependsOn": [
+								{
+									"activity": "upsert_dimensions",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"linkedServiceName": {
+								"referenceName": "ls_db",
+								"type": "LinkedServiceReference"
+							},
+							"typeProperties": {
+								"scripts": [
+									{
+										"type": "Query",
+										"text": {
+											"value": "MERGE FactSales AS target\n\nUSING\n(\n    SELECT\n        s.RecordID,\n        s.Invoice,\n        s.StockCode,\n        s.CustomerID,\n\n        CAST(\n            FORMAT(CAST(s.InvoiceDate AS DATE), 'yyyyMMdd')\n            AS INT\n        ) AS DateKey,\n\n        c.CountryKey,\n\n        s.Quantity,\n        s.Price,\n\n        s.Quantity * s.Price AS TotalAmount,\n\n        s.IsCancelled,\n        s.RecordType,\n        s.LastModifiedDate\n\n    FROM Staging_Sales s\n\n    INNER JOIN DimCountry c\n        ON c.CountryName = s.Country\n\n    WHERE s.LastModifiedDate >\n          '@{activity('Get_Gold_Watermark').output.firstRow.LastWatermarkValue}'\n\n) AS source\n\nON target.RecordID = source.RecordID\n\n\nWHEN MATCHED THEN\n\nUPDATE SET\n\n    target.Invoice = source.Invoice,\n    target.StockCode = source.StockCode,\n    target.CustomerID = source.CustomerID,\n    target.DateKey = source.DateKey,\n    target.CountryKey = source.CountryKey,\n    target.Quantity = source.Quantity,\n    target.Price = source.Price,\n    target.TotalAmount = source.TotalAmount,\n    target.IsCancelled = source.IsCancelled,\n    target.RecordType = source.RecordType,\n    target.LastModifiedDate = source.LastModifiedDate\n\n\nWHEN NOT MATCHED THEN\n\nINSERT\n(\n    RecordID,\n    Invoice,\n    StockCode,\n    CustomerID,\n    DateKey,\n    CountryKey,\n    Quantity,\n    Price,\n    TotalAmount,\n    IsCancelled,\n    RecordType,\n    LastModifiedDate\n)\n\nVALUES\n(\n    source.RecordID,\n    source.Invoice,\n    source.StockCode,\n    source.CustomerID,\n    source.DateKey,\n    source.CountryKey,\n    source.Quantity,\n    source.Price,\n    source.TotalAmount,\n    source.IsCancelled,\n    source.RecordType,\n    source.LastModifiedDate\n);",
+											"type": "Expression"
+										}
+									}
+								],
+								"scriptBlockExecutionTimeout": "02:00:00"
+							}
+						},
+						{
+							"name": "Get_New_Watermark",
+							"type": "Script",
+							"dependsOn": [
+								{
+									"activity": "Merge_FactSales",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"linkedServiceName": {
+								"referenceName": "ls_db",
+								"type": "LinkedServiceReference"
+							},
+							"typeProperties": {
+								"scripts": [
+									{
+										"type": "Query",
+										"text": {
+											"value": "SELECT MAX(LastModifiedDate) AS NewWatermark\nFROM FactSales;",
+											"type": "Expression"
+										}
+									}
+								],
+								"scriptBlockExecutionTimeout": "02:00:00"
+							}
+						},
+						{
+							"name": "Update_Watermark_Script",
+							"type": "Script",
+							"dependsOn": [
+								{
+									"activity": "Get_New_Watermark",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"linkedServiceName": {
+								"referenceName": "ls_db",
+								"type": "LinkedServiceReference"
+							},
+							"typeProperties": {
+								"scripts": [
+									{
+										"type": "Query",
+										"text": {
+											"value": "UPDATE WatermarkControl\nSET LastWatermarkValue =\n    CONVERT(\n        DATETIME,\n        LEFT(\n            REPLACE(\n                '@{activity('Get_New_Watermark').output.resultSets[0].rows[0].NewWatermark}',\n                'Z',\n                ''\n            ),\n            23\n        ),\n        126\n    )\nWHERE TableName = 'FactSales';",
+											"type": "Expression"
+										}
+									}
+								],
+								"scriptBlockExecutionTimeout": "02:00:00"
+							}
+						},
+						{
+							"name": "Copy_FactSales_to Gold",
+							"type": "Copy",
+							"dependsOn": [
+								{
+									"activity": "Update_Watermark_Script",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderQuery": {
+										"value": "SELECT\n    SalesID,\n    RecordID,\n    Invoice,\n    StockCode,\n    CustomerID,\n    DateKey,\n    CountryKey,\n    Quantity,\n    Price,\n    TotalAmount,\n    IsCancelled,\n    RecordType,\n    LastModifiedDate\nFROM FactSales;",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"sink": {
+									"type": "ParquetSink",
+									"storeSettings": {
+										"type": "AzureBlobFSWriteSettings"
+									},
+									"formatSettings": {
+										"type": "ParquetWriteSettings"
+									}
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"typeConversion": true,
+									"typeConversionSettings": {
+										"allowDataTruncation": true,
+										"treatBooleanAsNumber": false
+									}
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "ds_salesDB",
+									"type": "DatasetReference"
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "Gold_parquet",
+									"type": "DatasetReference"
+								}
+							]
+						}
+					]
+				}
+			}
+		],
+		"annotations": [],
+		"lastPublishTime": "2026-09-20T13:06:52Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

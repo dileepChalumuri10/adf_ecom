@@ -1,0 +1,71 @@
+{
+	"name": "ds_salesDB",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "ls_db",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "AzureSqlTable",
+		"schema": [
+			{
+				"name": "RecordID",
+				"type": "int",
+				"precision": 10
+			},
+			{
+				"name": "Invoice",
+				"type": "varchar"
+			},
+			{
+				"name": "StockCode",
+				"type": "varchar"
+			},
+			{
+				"name": "Description",
+				"type": "nvarchar"
+			},
+			{
+				"name": "Quantity",
+				"type": "int",
+				"precision": 10
+			},
+			{
+				"name": "InvoiceDate",
+				"type": "datetime",
+				"precision": 23,
+				"scale": 3
+			},
+			{
+				"name": "Price",
+				"type": "decimal",
+				"precision": 10,
+				"scale": 2
+			},
+			{
+				"name": "CustomerID",
+				"type": "int",
+				"precision": 10
+			},
+			{
+				"name": "Country",
+				"type": "nvarchar"
+			},
+			{
+				"name": "LastModifiedDate",
+				"type": "datetime",
+				"precision": 23,
+				"scale": 3
+			},
+			{
+				"name": "RecordStatus",
+				"type": "varchar"
+			}
+		],
+		"typeProperties": {
+			"schema": "dbo",
+			"table": "Staging_Sales"
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

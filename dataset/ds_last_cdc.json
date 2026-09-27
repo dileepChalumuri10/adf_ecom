@@ -1,0 +1,28 @@
+{
+	"name": "ds_last_cdc",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "ls_db",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "AzureSqlTable",
+		"schema": [
+			{
+				"name": "TableName",
+				"type": "varchar"
+			},
+			{
+				"name": "LastWatermarkValue",
+				"type": "datetime",
+				"precision": 23,
+				"scale": 3
+			}
+		],
+		"typeProperties": {
+			"schema": "dbo",
+			"table": "WatermarkControl"
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

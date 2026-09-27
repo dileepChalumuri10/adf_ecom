@@ -1,0 +1,58 @@
+{
+	"name": "df_json",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "ls_source",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "Json",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobFSLocation",
+				"fileName": "Sales_2026-09-20_13-57-38.json",
+				"folderPath": "Sales",
+				"fileSystem": "bronze"
+			}
+		},
+		"schema": {
+			"type": "object",
+			"properties": {
+				"RecordID": {
+					"type": "integer"
+				},
+				"Invoice": {
+					"type": "string"
+				},
+				"StockCode": {
+					"type": "string"
+				},
+				"Description": {
+					"type": "string"
+				},
+				"Quantity": {
+					"type": "integer"
+				},
+				"InvoiceDate": {
+					"type": "string"
+				},
+				"Price": {
+					"type": "number"
+				},
+				"CustomerID": {
+					"type": "integer"
+				},
+				"Country": {
+					"type": "string"
+				},
+				"LastModifiedDate": {
+					"type": "string"
+				},
+				"RecordStatus": {
+					"type": "string"
+				}
+			}
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

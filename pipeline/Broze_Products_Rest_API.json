@@ -1,0 +1,67 @@
+{
+	"name": "Broze_Products_Rest_API",
+	"properties": {
+		"activities": [
+			{
+				"name": "load_api_data",
+				"type": "Copy",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "RestSource",
+						"httpRequestTimeout": "00:01:40",
+						"requestInterval": "00.00:00:00.010",
+						"requestMethod": "GET",
+						"paginationRules": {
+							"QueryParameters.skip": "RANGE:0:194:30"
+						}
+					},
+					"sink": {
+						"type": "JsonSink",
+						"storeSettings": {
+							"type": "AzureBlobFSWriteSettings"
+						},
+						"formatSettings": {
+							"type": "JsonWriteSettings"
+						}
+					},
+					"enableStaging": false
+				},
+				"inputs": [
+					{
+						"referenceName": "products_ds_api",
+						"type": "DatasetReference"
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "products_json",
+						"type": "DatasetReference"
+					}
+				]
+			}
+		],
+		"parameters": {
+			"container_name": {
+				"type": "string"
+			},
+			"folder_name": {
+				"type": "string"
+			},
+			"file_name": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"lastPublishTime": "2026-09-20T13:45:09Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

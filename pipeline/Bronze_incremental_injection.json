@@ -1,0 +1,177 @@
+{
+	"name": "Bronze_incremental_injection",
+	"properties": {
+		"activities": [
+			{
+				"name": "last_updated",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": {
+							"value": "select LastWatermarkValue from dbo.WatermarkControl where TableName='SalesOLTP'",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "ds_last_cdc",
+						"type": "DatasetReference"
+					}
+				}
+			},
+			{
+				"name": "condition_for_new_data",
+				"type": "Script",
+				"dependsOn": [
+					{
+						"activity": "last_updated",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"linkedServiceName": {
+					"referenceName": "ls_db",
+					"type": "LinkedServiceReference"
+				},
+				"typeProperties": {
+					"scripts": [
+						{
+							"type": "Query",
+							"text": {
+								"value": "select count(*) as total_rows from dbo.SalesOLTP where LastModifiedDate>'@{formatDateTime(activity('last_updated').output.firstRow.LastWatermarkValue,'yyyy-MM-dd HH:mm:ss.fff')}'",
+								"type": "Expression"
+							}
+						}
+					],
+					"scriptBlockExecutionTimeout": "02:00:00"
+				}
+			},
+			{
+				"name": "If Condition1",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "condition_for_new_data",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@greater(activity('condition_for_new_data').output.resultSets[0].rows[0].total_rows,0)",
+						"type": "Expression"
+					},
+					"ifTrueActivities": [
+						{
+							"name": "new_records",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzureSqlSource",
+									"sqlReaderQuery": {
+										"value": "select * from dbo.SalesOLTP where LastModifiedDate>'@{formatDateTime(activity('last_updated').output.firstRow.LastWatermarkValue,'yyyy-MM-dd HH:mm:ss.fff')}'",
+										"type": "Expression"
+									},
+									"queryTimeout": "02:00:00",
+									"partitionOption": "None"
+								},
+								"sink": {
+									"type": "JsonSink",
+									"storeSettings": {
+										"type": "AzureBlobFSWriteSettings"
+									},
+									"formatSettings": {
+										"type": "JsonWriteSettings"
+									}
+								},
+								"enableStaging": false
+							},
+							"inputs": [
+								{
+									"referenceName": "ds_salesDB",
+									"type": "DatasetReference"
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "ds_bronze_sales_json",
+									"type": "DatasetReference"
+								}
+							]
+						},
+						{
+							"name": "updating_waterMarktable",
+							"type": "Script",
+							"dependsOn": [
+								{
+									"activity": "new_records",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"linkedServiceName": {
+								"referenceName": "ls_db",
+								"type": "LinkedServiceReference"
+							},
+							"typeProperties": {
+								"scripts": [
+									{
+										"type": "Query",
+										"text": {
+											"value": "UPDATE WatermarkControl set LastWatermarkValue = (SELECT MAX(LastModifiedDate) FROM SalesOLTP) where TableName='SalesOLTP'",
+											"type": "Expression"
+										}
+									}
+								],
+								"scriptBlockExecutionTimeout": "02:00:00"
+							}
+						}
+					]
+				}
+			}
+		],
+		"annotations": [],
+		"lastPublishTime": "2026-09-20T13:31:58Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

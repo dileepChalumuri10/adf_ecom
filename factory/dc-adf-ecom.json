@@ -1,0 +1,15 @@
+{
+	"name": "dc-adf-ecom",
+	"properties": {
+		"trustModeClaimForMi": {
+			"value": "Disabled",
+			"editable": true
+		}
+	},
+	"location": "eastus",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "2895eefb-226e-4983-9e1e-98e7d2ff0746",
+		"tenantId": "54335171-c3e8-475b-a352-18afd1008cec"
+	}
+}

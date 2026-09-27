@@ -1,0 +1,36 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"value": "dc-adf-ecom"
+		},
+		"ds_json_accountKey": {
+			"value": ""
+		},
+		"ls_db_password": {
+			"value": ""
+		},
+		"ls_source_accountKey": {
+			"value": ""
+		},
+		"ds_json_properties_typeProperties_url": {
+			"value": "https://dcecomsa.dfs.core.windows.net/"
+		},
+		"ls_api_properties_typeProperties_url": {
+			"value": "https://dummyjson.com/"
+		},
+		"ls_db_properties_typeProperties_server": {
+			"value": "adfecom.database.windows.net"
+		},
+		"ls_db_properties_typeProperties_database": {
+			"value": "dcadfecom"
+		},
+		"ls_db_properties_typeProperties_userName": {
+			"value": "Dileep"
+		},
+		"ls_source_properties_typeProperties_url": {
+			"value": "https://dcecomsa.dfs.core.windows.net/"
+		}
+	}
+}

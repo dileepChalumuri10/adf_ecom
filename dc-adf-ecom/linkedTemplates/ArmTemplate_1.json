@@ -1,0 +1,213 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name",
+			"defaultValue": "dc-adf-ecom"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/products_dataflow')]",
+			"type": "Microsoft.DataFactory/factories/dataflows",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"type": "MappingDataFlow",
+				"typeProperties": {
+					"sources": [
+						{
+							"dataset": {
+								"referenceName": "ds_bronze_sales_json",
+								"type": "DatasetReference"
+							},
+							"name": "sourceBronzeProducts"
+						}
+					],
+					"sinks": [
+						{
+							"dataset": {
+								"referenceName": "ds_products_parquet",
+								"type": "DatasetReference"
+							},
+							"name": "sinkSilverProducts"
+						},
+						{
+							"dataset": {
+								"referenceName": "products_image_parquet",
+								"type": "DatasetReference"
+							},
+							"name": "ImageSink"
+						}
+					],
+					"transformations": [
+						{
+							"name": "flattenProductsArray"
+						},
+						{
+							"name": "flattenImageArray"
+						}
+					],
+					"scriptLines": [
+						"source(output(",
+						"          products as (id as integer, title as string, description as string, category as string, price as double, discountPercentage as double, rating as double, stock as integer, tags as string[], brand as string, sku as string, weight as integer, dimensions as (width as double, height as double, depth as double), warrantyInformation as string, shippingInformation as string, availabilityStatus as string, reviews as (rating as integer, comment as string, date as string, reviewerName as string, reviewerEmail as string)[], returnPolicy as string, minimumOrderQuantity as integer, meta as (createdAt as string, updatedAt as string, barcode as string, qrCode as string), images as string[], thumbnail as string)[],",
+						"          total as integer,",
+						"          skip as integer,",
+						"          limit as integer",
+						"     ),",
+						"     allowSchemaDrift: true,",
+						"     validateSchema: false,",
+						"     ignoreNoFilesFound: false,",
+						"     documentForm: 'documentPerLine') ~> sourceBronzeProducts",
+						"sourceBronzeProducts foldDown(unroll(products, products),",
+						"     mapColumn(",
+						"          id = products.id,",
+						"          title = products.title,",
+						"          description = products.description,",
+						"          category = products.category,",
+						"          price = products.price,",
+						"          discountPercentage = products.discountPercentage,",
+						"          rating = products.rating,",
+						"          stock = products.stock,",
+						"          brand = products.brand,",
+						"          sku = products.sku,",
+						"          weight = products.weight,",
+						"          width = products.dimensions.width,",
+						"          height = products.dimensions.height,",
+						"          depth = products.dimensions.depth,",
+						"          warrantyInformation = products.warrantyInformation,",
+						"          shippingInformation = products.shippingInformation,",
+						"          availabilityStatus = products.availabilityStatus,",
+						"          returnPolicy = products.returnPolicy,",
+						"          minimumOrderQuantity = products.minimumOrderQuantity,",
+						"          thumbnail = products.thumbnail",
+						"     ),",
+						"     skipDuplicateMapInputs: false,",
+						"     skipDuplicateMapOutputs: false) ~> flattenProductsArray",
+						"sourceBronzeProducts foldDown(unroll(products.images, products.images),",
+						"     mapColumn(",
+						"          id = products.id,",
+						"          ImageURL = products.images",
+						"     ),",
+						"     skipDuplicateMapInputs: false,",
+						"     skipDuplicateMapOutputs: false) ~> flattenImageArray",
+						"flattenProductsArray sink(allowSchemaDrift: true,",
+						"     validateSchema: false,",
+						"     format: 'parquet',",
+						"     umask: 0022,",
+						"     preCommands: [],",
+						"     postCommands: [],",
+						"     skipDuplicateMapInputs: true,",
+						"     skipDuplicateMapOutputs: true) ~> sinkSilverProducts",
+						"flattenImageArray sink(allowSchemaDrift: true,",
+						"     validateSchema: false,",
+						"     format: 'parquet',",
+						"     umask: 0022,",
+						"     preCommands: [],",
+						"     postCommands: [],",
+						"     skipDuplicateMapInputs: true,",
+						"     skipDuplicateMapOutputs: true) ~> ImageSink"
+					]
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/silver_products_transformation')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Products_df",
+						"type": "ExecuteDataFlow",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataflow": {
+								"referenceName": "products_dataflow",
+								"type": "DataFlowReference",
+								"parameters": {},
+								"datasetParameters": {
+									"sourceBronzeProducts": {},
+									"sinkSilverProducts": {},
+									"ImageSink": {}
+								}
+							},
+							"staging": {},
+							"compute": {
+								"coreCount": 8,
+								"computeType": "General"
+							},
+							"traceLevel": "Fine"
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"annotations": [],
+				"lastPublishTime": "2026-09-12T06:50:38Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/dataflows/products_dataflow')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/silver_sales_transformation')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "SilverDataFlow",
+						"type": "ExecuteDataFlow",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataflow": {
+								"referenceName": "dataflow_clean_sales",
+								"type": "DataFlowReference",
+								"parameters": {},
+								"datasetParameters": {
+									"sourceBronzeSales": {},
+									"sinkSilverSales": {}
+								}
+							},
+							"staging": {},
+							"compute": {
+								"coreCount": 8,
+								"computeType": "General"
+							},
+							"traceLevel": "Fine"
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"annotations": [],
+				"lastPublishTime": "2026-09-20T14:11:30Z"
+			},
+			"dependsOn": []
+		}
+	]
+}

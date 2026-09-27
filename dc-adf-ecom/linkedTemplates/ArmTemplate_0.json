@@ -1,0 +1,1521 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name",
+			"defaultValue": "dc-adf-ecom"
+		},
+		"ds_json_accountKey": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accountKey' of 'ds_json'"
+		},
+		"ls_db_password": {
+			"type": "secureString",
+			"metadata": "Secure string for 'password' of 'ls_db'"
+		},
+		"ls_source_accountKey": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accountKey' of 'ls_source'"
+		},
+		"ds_json_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://dcecomsa.dfs.core.windows.net/"
+		},
+		"ls_api_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://dummyjson.com/"
+		},
+		"ls_db_properties_typeProperties_server": {
+			"type": "string",
+			"defaultValue": "adfecom.database.windows.net"
+		},
+		"ls_db_properties_typeProperties_database": {
+			"type": "string",
+			"defaultValue": "dcadfecom"
+		},
+		"ls_db_properties_typeProperties_userName": {
+			"type": "string",
+			"defaultValue": "Dileep"
+		},
+		"ls_source_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://dcecomsa.dfs.core.windows.net/"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/ds_json')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('ds_json_properties_typeProperties_url')]",
+					"accountKey": {
+						"type": "SecureString",
+						"value": "[parameters('ds_json_accountKey')]"
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ls_api')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "RestService",
+				"typeProperties": {
+					"url": "[parameters('ls_api_properties_typeProperties_url')]",
+					"enableServerCertificateValidation": true,
+					"authenticationType": "Anonymous"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ls_db')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureSqlDatabase",
+				"typeProperties": {
+					"server": "[parameters('ls_db_properties_typeProperties_server')]",
+					"database": "[parameters('ls_db_properties_typeProperties_database')]",
+					"encrypt": "mandatory",
+					"trustServerCertificate": false,
+					"authenticationType": "SQL",
+					"userName": "[parameters('ls_db_properties_typeProperties_userName')]",
+					"password": {
+						"type": "SecureString",
+						"value": "[parameters('ls_db_password')]"
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ls_source')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('ls_source_properties_typeProperties_url')]",
+					"accountKey": {
+						"type": "SecureString",
+						"value": "[parameters('ls_source_accountKey')]"
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/run_gold_transformation')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Reload DimCountry",
+						"type": "Script",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "ls_db",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "DELETE FROM DimCountry;\n\nINSERT INTO DimCountry (CountryName)\nSELECT DISTINCT Country\nFROM Staging_Sales;",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "Reload DimCustomer",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "Reload DimCountry",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "ls_db",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "DELETE FROM DimCustomer;\n\nINSERT INTO DimCustomer (CustomerID)\nSELECT DISTINCT CustomerID\nFROM Staging_Sales;",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "Reload DimProduct",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "Reload DimCustomer",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "ls_db",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "DELETE FROM DimProduct;\n\nINSERT INTO DimProduct (StockCode, Description)\nSELECT StockCode, MIN(Description)\nFROM Staging_Sales\nGROUP BY StockCode;",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "Reload DimDate",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "Reload DimProduct",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "ls_db",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "DELETE FROM DimDate;\n\nINSERT INTO DimDate\n(\n    DateKey,\n    FullDate,\n    Year,\n    Quarter,\n    Month,\n    Day,\n    DayOfWeek\n)\nSELECT DISTINCT\n    CAST(FORMAT(CAST(InvoiceDate AS DATE), 'yyyyMMdd') AS INT),\n    CAST(InvoiceDate AS DATE),\n    YEAR(InvoiceDate),\n    DATEPART(QUARTER, InvoiceDate),\n    MONTH(InvoiceDate),\n    DAY(InvoiceDate),\n    DATENAME(WEEKDAY, InvoiceDate)\nFROM Staging_Sales;",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "Reload FactSales",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "Reload DimDate",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "ls_db",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "TRUNCATE TABLE FactSales;\n\nINSERT INTO FactSales (Invoice, StockCode, CustomerID, DateKey, CountryKey, Quantity, Price, TotalAmount, IsCancelled, RecordType)\nSELECT\n    s.Invoice, s.StockCode, s.CustomerID,\n    CAST(FORMAT(CAST(s.InvoiceDate AS DATE), 'yyyyMMdd') AS INT),\n    c.CountryKey, s.Quantity, s.Price, s.Quantity * s.Price,\n    s.IsCancelled, s.RecordType\nFROM Staging_Sales s\nJOIN DimCountry c ON c.CountryName = s.Country;",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"annotations": [],
+				"lastPublishTime": "2026-09-14T13:46:12Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_db')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Gold_parquet')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_source",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Parquet",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": "FactSales_2026-09-14.parquet",
+						"folderPath": "FactSales",
+						"fileSystem": "gold"
+					},
+					"compressionCodec": "snappy"
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_source')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/df_json')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_source",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": "Sales_2026-09-20_13-57-38.json",
+						"folderPath": "Sales",
+						"fileSystem": "bronze"
+					}
+				},
+				"schema": {
+					"type": "object",
+					"properties": {
+						"RecordID": {
+							"type": "integer"
+						},
+						"Invoice": {
+							"type": "string"
+						},
+						"StockCode": {
+							"type": "string"
+						},
+						"Description": {
+							"type": "string"
+						},
+						"Quantity": {
+							"type": "integer"
+						},
+						"InvoiceDate": {
+							"type": "string"
+						},
+						"Price": {
+							"type": "number"
+						},
+						"CustomerID": {
+							"type": "integer"
+						},
+						"Country": {
+							"type": "string"
+						},
+						"LastModifiedDate": {
+							"type": "string"
+						},
+						"RecordStatus": {
+							"type": "string"
+						}
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_source')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ds_bronze_sales_json')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_source",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@concat('Sales_',formatDateTime(utcNow(),'yyyy-MM-dd_HH-mm-ss'),'.json')",
+							"type": "Expression"
+						},
+						"folderPath": "Sales",
+						"fileSystem": "bronze"
+					}
+				},
+				"schema": {
+					"type": "object",
+					"properties": {
+						"products": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"properties": {
+									"id": {
+										"type": "integer"
+									},
+									"title": {
+										"type": "string"
+									},
+									"description": {
+										"type": "string"
+									},
+									"category": {
+										"type": "string"
+									},
+									"price": {
+										"type": "number"
+									},
+									"discountPercentage": {
+										"type": "number"
+									},
+									"rating": {
+										"type": "number"
+									},
+									"stock": {
+										"type": "integer"
+									},
+									"tags": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									},
+									"brand": {
+										"type": "string"
+									},
+									"sku": {
+										"type": "string"
+									},
+									"weight": {
+										"type": "integer"
+									},
+									"dimensions": {
+										"type": "object",
+										"properties": {
+											"width": {
+												"type": "number"
+											},
+											"height": {
+												"type": "number"
+											},
+											"depth": {
+												"type": "number"
+											}
+										}
+									},
+									"warrantyInformation": {
+										"type": "string"
+									},
+									"shippingInformation": {
+										"type": "string"
+									},
+									"availabilityStatus": {
+										"type": "string"
+									},
+									"reviews": {
+										"type": "array",
+										"items": {
+											"type": "object",
+											"properties": {
+												"rating": {
+													"type": "integer"
+												},
+												"comment": {
+													"type": "string"
+												},
+												"date": {
+													"type": "string"
+												},
+												"reviewerName": {
+													"type": "string"
+												},
+												"reviewerEmail": {
+													"type": "string"
+												}
+											}
+										}
+									},
+									"returnPolicy": {
+										"type": "string"
+									},
+									"minimumOrderQuantity": {
+										"type": "integer"
+									},
+									"meta": {
+										"type": "object",
+										"properties": {
+											"createdAt": {
+												"type": "string"
+											},
+											"updatedAt": {
+												"type": "string"
+											},
+											"barcode": {
+												"type": "string"
+											},
+											"qrCode": {
+												"type": "string"
+											}
+										}
+									},
+									"images": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										}
+									},
+									"thumbnail": {
+										"type": "string"
+									}
+								}
+							}
+						},
+						"total": {
+							"type": "integer"
+						},
+						"skip": {
+							"type": "integer"
+						},
+						"limit": {
+							"type": "integer"
+						}
+					}
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_source')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ds_last_cdc')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_db",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureSqlTable",
+				"schema": [
+					{
+						"name": "TableName",
+						"type": "varchar"
+					},
+					{
+						"name": "LastWatermarkValue",
+						"type": "datetime",
+						"precision": 23,
+						"scale": 3
+					}
+				],
+				"typeProperties": {
+					"schema": "dbo",
+					"table": "WatermarkControl"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_db')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ds_products_parquet')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_source",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Parquet",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": "products_silver.parquet",
+						"folderPath": "products",
+						"fileSystem": "silver"
+					},
+					"compressionCodec": "snappy"
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_source')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ds_salesDB')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_db",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "AzureSqlTable",
+				"schema": [
+					{
+						"name": "RecordID",
+						"type": "int",
+						"precision": 10
+					},
+					{
+						"name": "Invoice",
+						"type": "varchar"
+					},
+					{
+						"name": "StockCode",
+						"type": "varchar"
+					},
+					{
+						"name": "Description",
+						"type": "nvarchar"
+					},
+					{
+						"name": "Quantity",
+						"type": "int",
+						"precision": 10
+					},
+					{
+						"name": "InvoiceDate",
+						"type": "datetime",
+						"precision": 23,
+						"scale": 3
+					},
+					{
+						"name": "Price",
+						"type": "decimal",
+						"precision": 10,
+						"scale": 2
+					},
+					{
+						"name": "CustomerID",
+						"type": "int",
+						"precision": 10
+					},
+					{
+						"name": "Country",
+						"type": "nvarchar"
+					},
+					{
+						"name": "LastModifiedDate",
+						"type": "datetime",
+						"precision": 23,
+						"scale": 3
+					},
+					{
+						"name": "RecordStatus",
+						"type": "varchar"
+					}
+				],
+				"typeProperties": {
+					"schema": "dbo",
+					"table": "Staging_Sales"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_db')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/ds_silver_sales_parquet')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_source",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Parquet",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": "Silver_sales.parquet",
+						"folderPath": "Sales",
+						"fileSystem": "silver"
+					},
+					"compressionCodec": "snappy"
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_source')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/products_ds_api')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_api",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "RestResource",
+				"typeProperties": {
+					"relativeUrl": "products?skip={skip}&limit=30"
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_api')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/products_image_parquet')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_source",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Parquet",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": "product_images.parquet",
+						"folderPath": "products_images",
+						"fileSystem": "silver"
+					},
+					"compressionCodec": "snappy"
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_source')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/products_json')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "ls_source",
+					"type": "LinkedServiceReference"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "AzureBlobFSLocation",
+						"fileName": {
+							"value": "@concat('Products_',formatDateTime(utcNow(),'yyyy-MM-dd'),'.json')",
+							"type": "Expression"
+						},
+						"folderPath": "Products",
+						"fileSystem": "bronze"
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/ls_source')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Bronze_incremental_injection')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "last_updated",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzureSqlSource",
+								"sqlReaderQuery": {
+									"value": "select LastWatermarkValue from dbo.WatermarkControl where TableName='SalesOLTP'",
+									"type": "Expression"
+								},
+								"queryTimeout": "02:00:00",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "ds_last_cdc",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						}
+					},
+					{
+						"name": "condition_for_new_data",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "last_updated",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "ls_db",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "select count(*) as total_rows from dbo.SalesOLTP where LastModifiedDate>'@{formatDateTime(activity('last_updated').output.firstRow.LastWatermarkValue,'yyyy-MM-dd HH:mm:ss.fff')}'",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "If Condition1",
+						"type": "IfCondition",
+						"dependsOn": [
+							{
+								"activity": "condition_for_new_data",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"expression": {
+								"value": "@greater(activity('condition_for_new_data').output.resultSets[0].rows[0].total_rows,0)",
+								"type": "Expression"
+							},
+							"ifTrueActivities": [
+								{
+									"name": "new_records",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzureSqlSource",
+											"sqlReaderQuery": {
+												"value": "select * from dbo.SalesOLTP where LastModifiedDate>'@{formatDateTime(activity('last_updated').output.firstRow.LastWatermarkValue,'yyyy-MM-dd HH:mm:ss.fff')}'",
+												"type": "Expression"
+											},
+											"queryTimeout": "02:00:00",
+											"partitionOption": "None"
+										},
+										"sink": {
+											"type": "JsonSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "JsonWriteSettings"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "ds_salesDB",
+											"type": "DatasetReference",
+											"parameters": {}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "ds_bronze_sales_json",
+											"type": "DatasetReference",
+											"parameters": {}
+										}
+									]
+								},
+								{
+									"name": "updating_waterMarktable",
+									"type": "Script",
+									"dependsOn": [
+										{
+											"activity": "new_records",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"linkedServiceName": {
+										"referenceName": "ls_db",
+										"type": "LinkedServiceReference"
+									},
+									"typeProperties": {
+										"scripts": [
+											{
+												"type": "Query",
+												"text": {
+													"value": "UPDATE WatermarkControl set LastWatermarkValue = (SELECT MAX(LastModifiedDate) FROM SalesOLTP) where TableName='SalesOLTP'",
+													"type": "Expression"
+												}
+											}
+										],
+										"scriptBlockExecutionTimeout": "02:00:00"
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"annotations": [],
+				"lastPublishTime": "2026-09-20T13:31:58Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/ds_last_cdc')]",
+				"[concat(variables('factoryId'), '/linkedServices/ls_db')]",
+				"[concat(variables('factoryId'), '/datasets/ds_salesDB')]",
+				"[concat(variables('factoryId'), '/datasets/ds_bronze_sales_json')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Broze_Products_Rest_API')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "load_api_data",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "RestSource",
+								"httpRequestTimeout": "00:01:40",
+								"requestInterval": "00.00:00:00.010",
+								"requestMethod": "GET",
+								"paginationRules": {
+									"QueryParameters.skip": "RANGE:0:194:30"
+								}
+							},
+							"sink": {
+								"type": "JsonSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "JsonWriteSettings"
+								}
+							},
+							"enableStaging": false
+						},
+						"inputs": [
+							{
+								"referenceName": "products_ds_api",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "products_json",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"container_name": {
+						"type": "string"
+					},
+					"folder_name": {
+						"type": "string"
+					},
+					"file_name": {
+						"type": "string"
+					}
+				},
+				"annotations": [],
+				"lastPublishTime": "2026-09-20T13:45:09Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/products_ds_api')]",
+				"[concat(variables('factoryId'), '/datasets/products_json')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/Gold_incremental_loading')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Get_Gold_Watermark",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzureSqlSource",
+								"sqlReaderQuery": {
+									"value": "select LastWatermarkValue from WatermarkControl where TableName='FactSales'",
+									"type": "Expression"
+								},
+								"queryTimeout": "02:00:00",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "ds_last_cdc",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						}
+					},
+					{
+						"name": "Total_rows_count",
+						"type": "Script",
+						"dependsOn": [
+							{
+								"activity": "Get_Gold_Watermark",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"linkedServiceName": {
+							"referenceName": "ls_db",
+							"type": "LinkedServiceReference"
+						},
+						"typeProperties": {
+							"scripts": [
+								{
+									"type": "Query",
+									"text": {
+										"value": "SELECT count(*) as total_rows \nFROM Staging_Sales where LastModifiedDate>'@{activity('Get_Gold_Watermark').output.firstRow.LastWatermarkValue}'",
+										"type": "Expression"
+									}
+								}
+							],
+							"scriptBlockExecutionTimeout": "02:00:00"
+						}
+					},
+					{
+						"name": "If_count_greaterthan_0",
+						"type": "IfCondition",
+						"dependsOn": [
+							{
+								"activity": "Total_rows_count",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"expression": {
+								"value": "@greater(activity('Total_rows_count').output.resultSets[0].rows[0].total_rows,0 )",
+								"type": "Expression"
+							},
+							"ifTrueActivities": [
+								{
+									"name": "upsert_dimensions",
+									"type": "Script",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"linkedServiceName": {
+										"referenceName": "ls_db",
+										"type": "LinkedServiceReference"
+									},
+									"typeProperties": {
+										"scripts": [
+											{
+												"type": "Query",
+												"text": {
+													"value": "/* ============================\n   DimCountry\n   ============================ */\n\nINSERT INTO DimCountry (CountryName)\nSELECT DISTINCT s.Country\nFROM Staging_Sales s\nWHERE s.LastModifiedDate >\n      '@{activity('Get_Gold_Watermark').output.firstRow.LastWatermarkValue}'\nAND NOT EXISTS\n(\n    SELECT 1\n    FROM DimCountry d\n    WHERE d.CountryName = s.Country\n);\n\n\n/* ============================\n   DimCustomer\n   ============================ */\n\nINSERT INTO DimCustomer (CustomerID)\nSELECT DISTINCT s.CustomerID\nFROM Staging_Sales s\nWHERE s.LastModifiedDate >\n      '@{activity('Get_Gold_Watermark').output.firstRow.LastWatermarkValue}'\nAND NOT EXISTS\n(\n    SELECT 1\n    FROM DimCustomer d\n    WHERE d.CustomerID = s.CustomerID\n);\n\n\n/* ============================\n   DimProduct\n   ============================ */\n\nINSERT INTO DimProduct\n(\n    StockCode,\n    Description\n)\nSELECT\n    s.StockCode,\n    MIN(s.Description)\nFROM Staging_Sales s\nWHERE s.LastModifiedDate >\n      '@{activity('Get_Gold_Watermark').output.firstRow.LastWatermarkValue}'\nAND NOT EXISTS\n(\n    SELECT 1\n    FROM DimProduct d\n    WHERE d.StockCode = s.StockCode\n)\nGROUP BY s.StockCode;\n\n\n/* ============================\n   DimDate\n   ============================ */\n\nINSERT INTO DimDate\n(\n    DateKey,\n    FullDate,\n    Year,\n    Quarter,\n    Month,\n    Day,\n    DayOfWeek\n)\nSELECT DISTINCT\n\n    CAST(\n        FORMAT(CAST(s.InvoiceDate AS DATE), 'yyyyMMdd')\n        AS INT\n    ),\n\n    CAST(s.InvoiceDate AS DATE),\n\n    YEAR(s.InvoiceDate),\n\n    DATEPART(QUARTER, s.InvoiceDate),\n\n    MONTH(s.InvoiceDate),\n\n    DAY(s.InvoiceDate),\n\n    DATENAME(WEEKDAY, s.InvoiceDate)\n\nFROM Staging_Sales s\n\nWHERE s.LastModifiedDate >\n      '@{activity('Get_Gold_Watermark').output.firstRow.LastWatermarkValue}'\n\nAND NOT EXISTS\n(\n    SELECT 1\n    FROM DimDate d\n    WHERE d.DateKey =\n        CAST(\n            FORMAT(CAST(s.InvoiceDate AS DATE), 'yyyyMMdd')\n            AS INT\n        )\n);",
+													"type": "Expression"
+												}
+											}
+										],
+										"scriptBlockExecutionTimeout": "02:00:00"
+									}
+								},
+								{
+									"name": "Merge_FactSales",
+									"type": "Script",
+									"dependsOn": [
+										{
+											"activity": "upsert_dimensions",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"linkedServiceName": {
+										"referenceName": "ls_db",
+										"type": "LinkedServiceReference"
+									},
+									"typeProperties": {
+										"scripts": [
+											{
+												"type": "Query",
+												"text": {
+													"value": "MERGE FactSales AS target\n\nUSING\n(\n    SELECT\n        s.RecordID,\n        s.Invoice,\n        s.StockCode,\n        s.CustomerID,\n\n        CAST(\n            FORMAT(CAST(s.InvoiceDate AS DATE), 'yyyyMMdd')\n            AS INT\n        ) AS DateKey,\n\n        c.CountryKey,\n\n        s.Quantity,\n        s.Price,\n\n        s.Quantity * s.Price AS TotalAmount,\n\n        s.IsCancelled,\n        s.RecordType,\n        s.LastModifiedDate\n\n    FROM Staging_Sales s\n\n    INNER JOIN DimCountry c\n        ON c.CountryName = s.Country\n\n    WHERE s.LastModifiedDate >\n          '@{activity('Get_Gold_Watermark').output.firstRow.LastWatermarkValue}'\n\n) AS source\n\nON target.RecordID = source.RecordID\n\n\nWHEN MATCHED THEN\n\nUPDATE SET\n\n    target.Invoice = source.Invoice,\n    target.StockCode = source.StockCode,\n    target.CustomerID = source.CustomerID,\n    target.DateKey = source.DateKey,\n    target.CountryKey = source.CountryKey,\n    target.Quantity = source.Quantity,\n    target.Price = source.Price,\n    target.TotalAmount = source.TotalAmount,\n    target.IsCancelled = source.IsCancelled,\n    target.RecordType = source.RecordType,\n    target.LastModifiedDate = source.LastModifiedDate\n\n\nWHEN NOT MATCHED THEN\n\nINSERT\n(\n    RecordID,\n    Invoice,\n    StockCode,\n    CustomerID,\n    DateKey,\n    CountryKey,\n    Quantity,\n    Price,\n    TotalAmount,\n    IsCancelled,\n    RecordType,\n    LastModifiedDate\n)\n\nVALUES\n(\n    source.RecordID,\n    source.Invoice,\n    source.StockCode,\n    source.CustomerID,\n    source.DateKey,\n    source.CountryKey,\n    source.Quantity,\n    source.Price,\n    source.TotalAmount,\n    source.IsCancelled,\n    source.RecordType,\n    source.LastModifiedDate\n);",
+													"type": "Expression"
+												}
+											}
+										],
+										"scriptBlockExecutionTimeout": "02:00:00"
+									}
+								},
+								{
+									"name": "Get_New_Watermark",
+									"type": "Script",
+									"dependsOn": [
+										{
+											"activity": "Merge_FactSales",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"linkedServiceName": {
+										"referenceName": "ls_db",
+										"type": "LinkedServiceReference"
+									},
+									"typeProperties": {
+										"scripts": [
+											{
+												"type": "Query",
+												"text": {
+													"value": "SELECT MAX(LastModifiedDate) AS NewWatermark\nFROM FactSales;",
+													"type": "Expression"
+												}
+											}
+										],
+										"scriptBlockExecutionTimeout": "02:00:00"
+									}
+								},
+								{
+									"name": "Update_Watermark_Script",
+									"type": "Script",
+									"dependsOn": [
+										{
+											"activity": "Get_New_Watermark",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"linkedServiceName": {
+										"referenceName": "ls_db",
+										"type": "LinkedServiceReference"
+									},
+									"typeProperties": {
+										"scripts": [
+											{
+												"type": "Query",
+												"text": {
+													"value": "UPDATE WatermarkControl\nSET LastWatermarkValue =\n    CONVERT(\n        DATETIME,\n        LEFT(\n            REPLACE(\n                '@{activity('Get_New_Watermark').output.resultSets[0].rows[0].NewWatermark}',\n                'Z',\n                ''\n            ),\n            23\n        ),\n        126\n    )\nWHERE TableName = 'FactSales';",
+													"type": "Expression"
+												}
+											}
+										],
+										"scriptBlockExecutionTimeout": "02:00:00"
+									}
+								},
+								{
+									"name": "Copy_FactSales_to Gold",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Update_Watermark_Script",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzureSqlSource",
+											"sqlReaderQuery": {
+												"value": "SELECT\n    SalesID,\n    RecordID,\n    Invoice,\n    StockCode,\n    CustomerID,\n    DateKey,\n    CountryKey,\n    Quantity,\n    Price,\n    TotalAmount,\n    IsCancelled,\n    RecordType,\n    LastModifiedDate\nFROM FactSales;",
+												"type": "Expression"
+											},
+											"queryTimeout": "02:00:00",
+											"partitionOption": "None"
+										},
+										"sink": {
+											"type": "ParquetSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "ParquetWriteSettings"
+											}
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "ds_salesDB",
+											"type": "DatasetReference",
+											"parameters": {}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "Gold_parquet",
+											"type": "DatasetReference",
+											"parameters": {}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"annotations": [],
+				"lastPublishTime": "2026-09-20T13:06:52Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/ds_last_cdc')]",
+				"[concat(variables('factoryId'), '/linkedServices/ls_db')]",
+				"[concat(variables('factoryId'), '/datasets/ds_salesDB')]",
+				"[concat(variables('factoryId'), '/datasets/Gold_parquet')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/load_staging_sales')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "loading_staging_slaes",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "ParquetSource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "ParquetReadSettings"
+								}
+							},
+							"sink": {
+								"type": "AzureSqlSink",
+								"preCopyScript": {
+									"value": "TRUNCATE TABLE Staging_Sales;",
+									"type": "Expression"
+								},
+								"writeBehavior": "insert",
+								"sqlWriterUseTableLock": false,
+								"disableMetricsCollection": false
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "ds_silver_sales_parquet",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "ds_salesDB",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"annotations": [],
+				"lastPublishTime": "2026-09-20T13:33:16Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/ds_silver_sales_parquet')]",
+				"[concat(variables('factoryId'), '/datasets/ds_salesDB')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/dataflow_clean_sales')]",
+			"type": "Microsoft.DataFactory/factories/dataflows",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"type": "MappingDataFlow",
+				"typeProperties": {
+					"sources": [
+						{
+							"dataset": {
+								"referenceName": "df_json",
+								"type": "DatasetReference"
+							},
+							"name": "sourceBronzeSales"
+						}
+					],
+					"sinks": [
+						{
+							"dataset": {
+								"referenceName": "ds_silver_sales_parquet",
+								"type": "DatasetReference"
+							},
+							"name": "sinkSilverSales"
+						}
+					],
+					"transformations": [
+						{
+							"name": "IsCancelled"
+						}
+					],
+					"scriptLines": [
+						"source(output(",
+						"          RecordID as integer,",
+						"          Invoice as string,",
+						"          StockCode as string,",
+						"          Description as string,",
+						"          Quantity as integer,",
+						"          InvoiceDate as string,",
+						"          Price as double,",
+						"          CustomerID as integer,",
+						"          Country as string,",
+						"          LastModifiedDate as string,",
+						"          RecordStatus as string",
+						"     ),",
+						"     allowSchemaDrift: true,",
+						"     validateSchema: false,",
+						"     ignoreNoFilesFound: false,",
+						"     documentForm: 'documentPerLine') ~> sourceBronzeSales",
+						"sourceBronzeSales derive(IsCancelled = startsWith(Invoice, 'C'),",
+						"          RecordType = iif(StockCode == 'POST', 'Postage', 'Sale'),",
+						"          CustomerID = iif(isNull(CustomerID), -1, CustomerID),",
+						"          LastModifiedDate = toTimestamp(LastModifiedDate, 'yyyy-MM-dd\\'T\\'HH:mm:ss.SSS'),",
+						"          InvoiceDate = toTimestamp(InvoiceDate, 'yyyy-MM-dd\\'T\\'HH:mm:ss')) ~> IsCancelled",
+						"IsCancelled sink(allowSchemaDrift: true,",
+						"     validateSchema: false,",
+						"     format: 'parquet',",
+						"     partitionFileNames:['Silver_sales.parquet'],",
+						"     umask: 0022,",
+						"     preCommands: [],",
+						"     postCommands: [],",
+						"     skipDuplicateMapInputs: true,",
+						"     skipDuplicateMapOutputs: true,",
+						"     partitionBy('hash', 1)) ~> sinkSilverSales"
+					]
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/df_json')]",
+				"[concat(variables('factoryId'), '/datasets/ds_silver_sales_parquet')]"
+			]
+		}
+	]
+}

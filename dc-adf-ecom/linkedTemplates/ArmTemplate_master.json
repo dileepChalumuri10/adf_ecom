@@ -1,0 +1,125 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"factoryName": {
+			"type": "string",
+			"metadata": "Data Factory name",
+			"defaultValue": "dc-adf-ecom"
+		},
+		"ds_json_accountKey": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accountKey' of 'ds_json'"
+		},
+		"ls_db_password": {
+			"type": "secureString",
+			"metadata": "Secure string for 'password' of 'ls_db'"
+		},
+		"ls_source_accountKey": {
+			"type": "secureString",
+			"metadata": "Secure string for 'accountKey' of 'ls_source'"
+		},
+		"ds_json_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://dcecomsa.dfs.core.windows.net/"
+		},
+		"ls_api_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://dummyjson.com/"
+		},
+		"ls_db_properties_typeProperties_server": {
+			"type": "string",
+			"defaultValue": "adfecom.database.windows.net"
+		},
+		"ls_db_properties_typeProperties_database": {
+			"type": "string",
+			"defaultValue": "dcadfecom"
+		},
+		"ls_db_properties_typeProperties_userName": {
+			"type": "string",
+			"defaultValue": "Dileep"
+		},
+		"ls_source_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://dcecomsa.dfs.core.windows.net/"
+		},
+		"containerUri": {
+			"type": "string",
+			"metadata": "URI to storage account containing linked ARM templates"
+		},
+		"containerSasToken": {
+			"type": "string",
+			"metadata": "Sas token to storage account containing linked ARM templates"
+		}
+	},
+	"variables": {
+		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
+	},
+	"resources": [
+		{
+			"name": "dc-adf-ecom_ArmTemplate_0",
+			"type": "Microsoft.Resources/deployments",
+			"apiVersion": "2024-03-01",
+			"properties": {
+				"mode": "incremental",
+				"templateLink": {
+					"uri": "[concat(parameters('containerUri'), '/ArmTemplate_0.json', parameters('containerSasToken'))]",
+					"contentVersion": "1.0.0.0"
+				},
+				"parameters": {
+					"factoryName": {
+						"value": "[parameters('factoryName')]"
+					},
+					"ds_json_accountKey": {
+						"value": "[parameters('ds_json_accountKey')]"
+					},
+					"ls_db_password": {
+						"value": "[parameters('ls_db_password')]"
+					},
+					"ls_source_accountKey": {
+						"value": "[parameters('ls_source_accountKey')]"
+					},
+					"ds_json_properties_typeProperties_url": {
+						"value": "[parameters('ds_json_properties_typeProperties_url')]"
+					},
+					"ls_api_properties_typeProperties_url": {
+						"value": "[parameters('ls_api_properties_typeProperties_url')]"
+					},
+					"ls_db_properties_typeProperties_server": {
+						"value": "[parameters('ls_db_properties_typeProperties_server')]"
+					},
+					"ls_db_properties_typeProperties_database": {
+						"value": "[parameters('ls_db_properties_typeProperties_database')]"
+					},
+					"ls_db_properties_typeProperties_userName": {
+						"value": "[parameters('ls_db_properties_typeProperties_userName')]"
+					},
+					"ls_source_properties_typeProperties_url": {
+						"value": "[parameters('ls_source_properties_typeProperties_url')]"
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "dc-adf-ecom_ArmTemplate_1",
+			"type": "Microsoft.Resources/deployments",
+			"apiVersion": "2024-03-01",
+			"properties": {
+				"mode": "incremental",
+				"templateLink": {
+					"uri": "[concat(parameters('containerUri'), '/ArmTemplate_1.json', parameters('containerSasToken'))]",
+					"contentVersion": "1.0.0.0"
+				},
+				"parameters": {
+					"factoryName": {
+						"value": "[parameters('factoryName')]"
+					}
+				}
+			},
+			"dependsOn": [
+				"[resourceId('Microsoft.Resources/deployments', 'dc-adf-ecom_ArmTemplate_0')]"
+			]
+		}
+	]
+}
